@@ -31,9 +31,13 @@ class SalatPlugin(app: Application) extends Plugin {
           val maybe = for {
             u <- user
             p <- password
-          } yield MongoCredential.createMongoCRCredential(u, dbName, p.toArray)
+          } yield {
+            //Use CR Authentication, default authentication mechanism of 2.6 
+            //TODO: need to support other authentication mechanisms
+            MongoCredential.createMongoCRCredential(u, dbName, p.toArray)
+          }
 
-          List(maybe).flatten
+          maybe.toList
         }
 
         conn = Try( 
