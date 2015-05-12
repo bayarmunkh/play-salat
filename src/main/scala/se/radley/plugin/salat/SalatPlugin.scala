@@ -14,6 +14,8 @@ class SalatPlugin(app: Application) extends Plugin {
 
   lazy val configuration = app.configuration.getConfig("mongodb").getOrElse(Configuration.empty)
 
+  private[this] val authDB = "admin"
+
   case class MongoSource(
     val hosts: List[ServerAddress],
     val dbName: String,
@@ -21,6 +23,7 @@ class SalatPlugin(app: Application) extends Plugin {
     val user: Option[String] = None,
     val password: Option[String] = None,
     val options: Option[MongoClientOptions],
+    val multiAuth: Boolean = false,
     private var conn: MongoClient = null
   ){
 
@@ -34,7 +37,10 @@ class SalatPlugin(app: Application) extends Plugin {
           } yield {
             //Use CR Authentication, default authentication mechanism of 2.6 
             //TODO: need to support other authentication mechanisms
-            MongoCredential.createMongoCRCredential(u, dbName, p.toArray)
+            if(multiAuth)
+              MongoCredential.createMongoCRCredential(u, authDB, p.toArray)
+            else
+              MongoCredential.createMongoCRCredential(u, dbName, p.toArray)
           }
 
           maybe.toList
@@ -83,7 +89,9 @@ class SalatPlugin(app: Application) extends Plugin {
     }
   }
 
-  lazy val sources: Map[String, MongoSource] = configuration.subKeys.map { sourceKey =>
+  val multiAuth = configuration.getBoolean("multiAuth").getOrElse(false)
+
+  lazy val sources: Map[String, MongoSource] = configuration.subKeys.filter(_ != "multiAuth").map { sourceKey =>
     val source = configuration.getConfig(sourceKey).getOrElse(Configuration.empty)
     val options: Option[MongoClientOptions] = source.getConfig("options").flatMap(opts => OptionsFromConfig(opts))
 
@@ -102,7 +110,7 @@ class SalatPlugin(app: Application) extends Plugin {
       val writeConcern = uri.options.getWriteConcern
       val user = uri.username
       val password = uri.password.map(_.mkString).filterNot(_.isEmpty)
-      sourceKey -> MongoSource(hosts, db, writeConcern, user, password, options)
+      sourceKey -> MongoSource(hosts, db, writeConcern, user, password, options, multiAuth)
     }.getOrElse {
       val dbName = source.getString("db").getOrElse(throw configuration.reportError("mongodb." + sourceKey + ".db", "db missing for source[" + sourceKey + "]"))
 
@@ -129,9 +137,9 @@ class SalatPlugin(app: Application) extends Plugin {
 
       // If there are replicasets configured go with those otherwise fallback to simple config
       if (hosts.isEmpty)
-        sourceKey -> MongoSource(List(new ServerAddress(host, port)), dbName, writeConcern, user, password, options)
+        sourceKey -> MongoSource(List(new ServerAddress(host, port)), dbName, writeConcern, user, password, options, multiAuth)
       else
-        sourceKey -> MongoSource(hosts, dbName, writeConcern, user, password, options)
+        sourceKey -> MongoSource(hosts, dbName, writeConcern, user, password, options, multiAuth)
     }
   }.toMap
 
@@ -143,7 +151,7 @@ class SalatPlugin(app: Application) extends Plugin {
         case Mode.Test =>
         case _ => {
           try {
-            source._2.connection(source._2.dbName).getCollectionNames()
+            source._2.db.getCollectionNames()
           } catch {
             case e: MongoException => throw configuration.reportError("mongodb." + source._1, "couldn't connect to [" + source._2.hosts.mkString(", ") + "]", Some(e))
           } finally {
