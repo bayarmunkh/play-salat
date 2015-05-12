@@ -14,6 +14,8 @@ class SalatPlugin(app: Application) extends Plugin {
 
   lazy val configuration = app.configuration.getConfig("mongodb").getOrElse(Configuration.empty)
 
+  lazy val multiAuth = app.configuration.getBoolean("mongodb-global.multiAuth").getOrElse(false)
+
   private[this] val authDB = "admin"
 
   case class MongoSource(
@@ -89,9 +91,7 @@ class SalatPlugin(app: Application) extends Plugin {
     }
   }
 
-  lazy val multiAuth = configuration.getBoolean("multiAuth").getOrElse(false)
-
-  lazy val sources: Map[String, MongoSource] = configuration.subKeys.filter(_ != "multiAuth").map { sourceKey =>
+  lazy val sources: Map[String, MongoSource] = configuration.subKeys.map { sourceKey =>
     val source = configuration.getConfig(sourceKey).getOrElse(Configuration.empty)
     val options: Option[MongoClientOptions] = source.getConfig("options").flatMap(opts => OptionsFromConfig(opts))
 
