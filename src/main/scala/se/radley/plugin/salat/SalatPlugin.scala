@@ -89,7 +89,7 @@ class SalatPlugin(app: Application) extends Plugin {
     }
   }
 
-  val multiAuth = configuration.getBoolean("multiAuth").getOrElse(false)
+  lazy val multiAuth = configuration.getBoolean("multiAuth").getOrElse(false)
 
   lazy val sources: Map[String, MongoSource] = configuration.subKeys.filter(_ != "multiAuth").map { sourceKey =>
     val source = configuration.getConfig(sourceKey).getOrElse(Configuration.empty)
